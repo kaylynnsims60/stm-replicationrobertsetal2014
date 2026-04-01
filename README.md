@@ -1,7 +1,7 @@
 # Replication Materials: Roberts et al. STM for Open-Ended Survey Responses
 
-This repository contains replication materials for a Structural Topic Model (STM) analysis based on Roberts et al's (2014) paper. 
-The purpose of this project is to reproduce key figures and analytical steps from the original paper while documenting the workflow and challenges of replicating STM analyses using the modern `stm` package in R.
+This repository contains replication materials for a Structural Topic Model (STM) analysis based on Roberts et al. (2014). 
+The purpose of this project is to reproduce the figures and analytical steps from the original paper while documenting the workflow and challenges of replicating STM analyses using the modern `stm` package in R.
 
 ## Original Paper
 
@@ -18,13 +18,13 @@ This replication reconstructs the authors’ STM workflow using the original rep
 - Estimating treatment and interaction effects  
 - Comparing replicated outputs to the original results  
 
-Because the original analysis relied on an earlier version of STM and helper functions that are no longer fully available, this replication emphasizes **substantive similarity** rather than exact numerical reproduction.
+Because the original analysis relied on an earlier version of STM and helper functions that are no longer fully available, this replication emphasizes **similarity** rather than exact numerical reproduction.
 
 ## Code
 
 The replication script is:
 
-scripts/gadarian_replication.Rmd
+`scripts/Robertsetalreplication.Rmd`
 
 This file contains the full workflow, including:
 
@@ -34,8 +34,8 @@ This file contains the full workflow, including:
 - Selecting a model based on similarity to published results 
 - Inspecting topics using `labelTopics()`  
 - Extracting example documents using `findThoughts()`  
-- Estimating topic prevalence effects using `estimateEffect()`  
-- Recreating figures using both built-in STM tools and custom plotting functions where it was required due to uncertainty regarding original methods.
+- Estimating topic prevalence and interaction effects using `estimateEffect()`  
+- Recreating figures using both built-in STM tools and custom plotting functions where the original methods could not be fully recovered. 
 
 Some figures were recreated using custom functions because the original helper functions referenced in the paper were not available.
 
@@ -47,7 +47,7 @@ STM produces different results across runs due to local mode variation. As a res
 
 The data used in this replication is stored in:
 
-data/original_replication_files/   
+`data/original_replication_files/`
 
 - `original_replication_files/` contains the original datasets provided by the authors  
 
@@ -55,7 +55,7 @@ These files include:
 - document-term matrices  
 - vocabulary files  
 - metadata associated with each document
-- original figures and tables
+- original figures and tables used for comparison
 
 ### Data Limitations
 
@@ -65,7 +65,7 @@ Some components of the replication materials (particularly those associated with
 
 Generated figures and outputs are stored in:
 
-output/figures/  
+`output/figures/`
 
 Figures are also generated directly within the `.Rmd` workflow script. 
 
@@ -73,7 +73,7 @@ Figures are also generated directly within the `.Rmd` workflow script.
 
 The final replication report and presentation materials are located in:
 
-report/
+`report/`
 
 ## Main Replication Challenges
 
@@ -98,8 +98,13 @@ Some datasets, particularly in the Rand and ANES experiments, contained mismatch
 
 ## How to Run the Replication
 
-1. Open `scripts/gadarian_replication.Rmd` in RStudio  
+1. Open `scripts/Roberstetalreplication.Rmd` in RStudio  
 2. Install required packages:
 
 ```r
 install.packages(c("stm", "tidyverse", "knitr"))
+```
+3. Set the working directory to the location of the replication data  
+4. Run the script or knit the document  
+
+Depending on your system, you may also need to install additional packages referenced directly in the script.
