@@ -1,0 +1,1050 @@
+---
+title: "Roberts et al. Replication"
+author: "Kaylynn Driggers"
+date: "2026-03-31"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lda) #A function used to run LDA in the original paper simulations. 
+library(slam)
+#install.packages("remotes")
+#install.packages("stm")
+#install.packages("~/stmdev/rcode/stm_0.03.07.tar.gz", type="source", repos=NULL) #I attempted to recover the early STM version referenced in the original materials,
+#but that package version would not install/load in a usable way on my machine.
+library(stm) #STM is the package that estimates structured topic models
+library(tidyverse) #used for data wrangling, plotting, workflow management. 
+knitr::opts_knit$set(root.dir = "C:/Users/KaylynnTemp/Documents/Winter2026PhD/Text Analysis/Replication Project/Original Replication Data") #Set the working directory to the original replication files so that all data reads point to the same folder used throughout this document.
+
+
+#These helper functions were referenced in the original STM workflow, but I could not recover
+#them in a usable form, so later figures were recreated with current STM tools or custom functions.
+#source("~/stmdev/rcode/stm/R/ploteffect.R")
+#source("~/stmdev/rcode/stm/R/findthoughts.R")
+#source("~/stmdev/rcode/stm/R/plottopics.R")
+#source("~/stmdev/rcode/stm/R/plot.stm.R")
+#source("~/stmdev/rcode/stm/R/plotPerspectives.R")
+
+```
+#Gadarian Experiment Set
+
+
+#Cleaning Data for Gadarian Data
+```{r}
+#Read the original Gadarian experiment document-term matrix, vocabulary, and metadata.
+dataldac <- readLdac("gadarian_final_tdm.csv") # Reads the text data in LDAC format, which stores each document as term-frequency pairs.
+vocabcoarse <- read.csv("gadarian_vocab.csv")$term #Reads the vocabulary file and keep only the term column so topic outputs can be translated back into words.
+meta <- read.csv("gadarian_metadata.csv") # Read the document-level metadata used for prevalence covariates and interpretation.
+meta$treatment <- as.numeric(meta$treat=="1. worried") # Recode the treatment indicator into a binary variable used in the STM prevalence formulas.
+
+data <- prepDocuments(dataldac, vocabcoarse, meta=meta) # Clean and align documents, vocabulary, and metadata so the STM package can estimate the model without mismatches.
+documents <- data$documents # Extract the processed document list used by stm.
+vocab <- data$vocab # Extract the cleaned vocabulary that matches the processed documents.
+meta <- data$meta # Replace the original metadata with the cleaned metadata returned by prepDocuments.
+```
+
+
+#Selecting the Gadarian STM used for Replication
+```{r, include=FALSE}
+#In this chunk I did multiple STM runs to find the model that was as close to the original as possible. I followed the author's procedure and did 50 runs. 
+#Search and Select Model
+set.seed(9432) #set a random seed, after attempting to use the author's seed, just to see if it would work. 
+models <- selectModel(documents, vocab, 3, prevalence=~meta$treatment + meta$pid_rep + meta$treatment*meta$pid_rep, runs=50) # Estimate multiple candidate 3-topic STM models and compare them, using treatment, party ID, and their interaction as prevalence covariates.
+plotModels(models)  #plotModels() lets me compare candidate solutions across semantic coherence/exclusivity,
+# before choosing the run that is most substantively similar to the published results.
+
+
+#I selected run 4 because its topic structure and downstream effect plots were 
+#the closest match to the published figures in the paper, even though the 
+#replication did not recover the exact same solution as the original.
+
+mod <- models$runout[[4]] #Select one candidate model from the search output for downstream analysis and figure replication, 4 was closest yet
+labelTopics(mod) # inspect the words associated with each recovered topic. 
+```
+
+
+
+#Figure 2: Simulation 1, Estimated Average Treatment Effect with 95% CI
+
+##Figure 3: Simulation 2, Comparison with LDA
+
+Figures 2 and 3 were simulations run by the authors. The code for how the authors set up and ran these was not included in the replication package. 
+
+#Figure 4: Vocabulary Associated with Topics
+```{r}
+# Figure 4 displays the main vocabulary associated with the recovered topics,
+# while Figures 5 and 6 use representative quotes to illustrate the substance of those topics.
+
+# Topics to display
+topics_show <- c(1, 2)
+
+labs <- labelTopics(mod, topics = topics_show, n = 15) # Pull the top words for the selected topics so the figure can show the topic vocabulary.
+
+thoughts <- findThoughts(  # Retrieve exemplar documents that load highly on each topic so the replication can show representative quotes.
+  model = mod,
+  texts = meta$open.ended.response,
+  topics = topics_show,
+  n = 5
+)
+thoughts$docs[[2]]  
+# Pick one exemplar per topic.
+# Change [X] if another candidate reads better.
+quote_t1 <- thoughts$docs[[1]][3]
+quote_t2 <- thoughts$docs[[2]][3]
+
+
+# Custom function used to recreate the topic-word panel layout from the paper.
+# I wrote this manually because the original helper plotting functions were unavailable,
+# so this function is for reproducing the published figure style rather than estimating the STM itself.
+
+make_stm_topic_panel <- function(
+    model,
+    topic1,
+    topic2 = NULL,
+    n = 7,
+    frexweight = 0.5,
+    wrap_width = 42,
+    rect_xleft = 0.08,
+    rect_ybottom = 0.12,
+    rect_xright = 0.92,
+    rect_ytop = 0.88,
+    padding_x = 0.05,
+    padding_y = 0.06,
+    sep_gap = 0.05,
+    cex_text = 1.0,
+    lineheight = 1.15,
+    family = "sans",
+    border_lwd = 2,
+    sep_lwd = 1.5,
+    sep_lty = 2,
+    topic_prefix = "Topic",
+    return_recorded = FALSE
+) {
+  if (length(wrap_width) == 1L) {
+    wrap_width <- c(wrap_width, wrap_width)
+  }
+  if (length(wrap_width) != 2L) {
+    stop("wrap_width must have length 1 or 2.")
+  }
+  
+  topics_requested <- c(topic1, if (!is.null(topic2)) topic2)
+  
+  K <- if (!is.null(model$settings$dim$K)) {
+    model$settings$dim$K
+  } else if (!is.null(model$theta)) {
+    ncol(model$theta)
+  } else {
+    stop("Could not determine the number of topics in the STM object.")
+  }
+  
+  if (any(!is.finite(topics_requested)) ||
+      any(topics_requested < 1) ||
+      any(topics_requested > K)) {
+    stop(sprintf("Topic numbers must be between 1 and %d.", K))
+  }
+  
+  labs <- stm::labelTopics(
+    model,
+    topics = unique(topics_requested),
+    n = n,
+    frexweight = frexweight
+  )
+  
+  make_topic_block <- function(topic_id, width) {
+    row_id <- match(topic_id, labs$topicnums)
+    if (is.na(row_id)) {
+      stop(sprintf("Could not find topic %s in labelTopics() output.", topic_id))
+    }
+    
+    if (all(c("prob", "frex", "lift", "score") %in% names(labs))) {
+      lines <- c(
+        sprintf("%s %d", topic_prefix, topic_id),
+       paste(labs$prob[row_id, ], collapse = ", "),
+       paste(labs$frex[row_id, ], collapse = ", "),
+       paste(labs$lift[row_id, ], collapse = ", "),
+      paste(labs$score[row_id, ], collapse = ", "))
+    } else if ("topics" %in% names(labs)) {
+      # Fallback for content-covariate/aspect models
+      lines <- c(
+        sprintf("%s %d", topic_prefix, topic_id),
+        paste0("Topic Words: ", paste(labs$topics[row_id, ], collapse = ", "))
+      )
+    } else {
+      stop("Unsupported labelTopics() output structure.")
+    }
+    
+    wrapped <- c(
+      lines[1],
+      unlist(lapply(lines[-1], function(z) strwrap(z, width = width, exdent = 2)))
+    )
+    
+    paste(wrapped, collapse = "\n")
+  }
+  
+  block1 <- make_topic_block(topic1, wrap_width[1])
+  block2 <- if (!is.null(topic2)) make_topic_block(topic2, wrap_width[2]) else NULL
+  
+  op <- par(
+    mar = c(0, 0, 0, 0),
+    xpd = NA,
+    family = family,
+    lheight = lineheight
+  )
+  on.exit(par(op), add = TRUE)
+  
+  plot.new()
+  plot.window(xlim = c(0, 1), ylim = c(0, 1), xaxs = "i", yaxs = "i")
+  
+  rect(
+    rect_xleft, rect_ybottom, rect_xright, rect_ytop,
+    col = "white", border = "black", lwd = border_lwd
+  )
+  
+  panel_w <- rect_xright - rect_xleft
+  panel_h <- rect_ytop - rect_ybottom
+  
+  x_left   <- rect_xleft   + padding_x * panel_w
+  x_right  <- rect_xright  - padding_x * panel_w
+  y_bottom <- rect_ybottom + padding_y * panel_h
+  y_top    <- rect_ytop    - padding_y * panel_h
+  x_mid    <- (x_left + x_right) / 2
+  
+  if (is.null(block2)) {
+    text(
+      x = x_mid,
+      y = (y_bottom + y_top) / 2,
+      labels = block1,
+      adj = c(0.5, 0.5),
+      cex = cex_text,
+      family = family,
+      col = "black"
+    )
+    
+    if (return_recorded) {
+      return(recordPlot())
+    } else {
+      return(invisible(NULL))
+    }
+  }
+  
+  h1 <- strheight(block1, units = "user", cex = cex_text, family = family)
+  h2 <- strheight(block2, units = "user", cex = cex_text, family = family)
+  
+  if (!is.finite(h1) || h1 <= 0) h1 <- 1
+  if (!is.finite(h2) || h2 <= 0) h2 <- 1
+  
+  sep_gap_user <- sep_gap * panel_h
+  inner_h <- y_top - y_bottom
+  usable_h <- inner_h - sep_gap_user
+  
+  if (usable_h <= 0) {
+    stop("Not enough vertical space after padding and separator gap.")
+  }
+  
+  share1 <- h1 / (h1 + h2)
+  share2 <- h2 / (h1 + h2)
+  
+  top_h <- usable_h * share1
+  bottom_h <- usable_h * share2
+  y_sep <- y_bottom + bottom_h + sep_gap_user / 2
+  
+  text(
+    x = x_mid,
+    y = y_top - top_h / 2,
+    labels = block1,
+    adj = c(0.5, 0.5),
+    cex = cex_text,
+    family = family,
+    col = "black"
+  )
+  
+  segments(
+    x0 = x_left, y0 = y_sep,
+    x1 = x_right, y1 = y_sep,
+    lty = sep_lty, lwd = sep_lwd, col = "black"
+  )
+  
+  text(
+    x = x_mid,
+    y = y_bottom + bottom_h / 2,
+    labels = block2,
+    adj = c(0.5, 0.5),
+    cex = cex_text,
+    family = family,
+    col = "black"
+  )
+  
+  if (return_recorded) {
+    recordPlot()
+  } else {
+    invisible(NULL)
+  }
+}
+# Custom function to display one or two exemplar quotes in a boxed panel.
+# I wrote this because the original helper plotting functions were unavailable,
+# and I needed a way to approximate the visual layout used in the paper.
+
+make_quote_panel <- function(
+    quote1,
+    quote2 = NULL,
+    wrap_width = 35,
+    rect_xleft = 0.08,
+    rect_ybottom = 0.15,
+    rect_xright = 0.92,
+    rect_ytop = 0.85,
+    padding_x = 0.05,
+    padding_y = 0.06,
+    sep_gap = 0.05,      # fraction of panel height
+    cex_text = 1.1,
+    lineheight = 1.2,
+    family = "sans",
+    border_lwd = 2,
+    sep_lwd = 1.5,
+    sep_lty = 2,
+    add_quotes = FALSE,
+    return_recorded = FALSE
+) {
+  if (length(wrap_width) == 1L) {
+    wrap_width <- c(wrap_width, wrap_width)
+  }
+  if (length(wrap_width) != 2L) {
+    stop("wrap_width must have length 1 or 2.")
+  }
+  if (is.null(quote1) || !nzchar(quote1)) {
+    stop("quote1 must be a non-empty string.")
+  }
+  
+  format_quote <- function(x, width) {
+    if (is.null(x) || !nzchar(x)) return(NULL)
+    x <- if (add_quotes) paste0("\"", x, "\"") else x
+    paste(strwrap(x, width = width), collapse = "\n")
+  }
+  
+  q1 <- format_quote(quote1, wrap_width[1])
+  q2 <- format_quote(quote2, wrap_width[2])
+  
+  op <- par(
+    mar = c(0, 0, 0, 0),
+    xpd = NA,
+    family = family,
+    lheight = lineheight
+  )
+  on.exit(par(op), add = TRUE)
+  
+  plot.new()
+  plot.window(xlim = c(0, 1), ylim = c(0, 1), xaxs = "i", yaxs = "i")
+  
+  # Outer panel
+  rect(rect_xleft, rect_ybottom, rect_xright, rect_ytop,
+       col = "white", border = "black", lwd = border_lwd)
+  
+  panel_w <- rect_xright - rect_xleft
+  panel_h <- rect_ytop - rect_ybottom
+  
+  x_left   <- rect_xleft   + padding_x * panel_w
+  x_right  <- rect_xright  - padding_x * panel_w
+  y_bottom <- rect_ybottom + padding_y * panel_h
+  y_top    <- rect_ytop    - padding_y * panel_h
+  x_mid    <- (x_left + x_right) / 2
+  
+  # Single-quote case
+  if (is.null(q2)) {
+    text(
+      x = x_mid,
+      y = (y_bottom + y_top) / 2,
+      labels = q1,
+      adj = c(0.5, 0.5),
+      cex = cex_text,
+      family = family,
+      col = "black"
+    )
+    
+    if (return_recorded) {
+      return(recordPlot())
+    } else {
+      return(invisible(NULL))
+    }
+  }
+  
+  # Two-quote case: measure wrapped heights on the active device
+  h1 <- strheight(q1, units = "user", cex = cex_text, family = family)
+  h2 <- strheight(q2, units = "user", cex = cex_text, family = family)
+  
+  if (!is.finite(h1) || h1 <= 0) h1 <- 1
+  if (!is.finite(h2) || h2 <= 0) h2 <- 1
+  
+  sep_gap_user <- sep_gap * panel_h
+  inner_h <- y_top - y_bottom
+  usable_h <- inner_h - sep_gap_user
+  
+  if (usable_h <= 0) {
+    stop("Not enough vertical space after padding and separator gap.")
+  }
+  
+  share1 <- h1 / (h1 + h2)
+  share2 <- h2 / (h1 + h2)
+  
+  top_h <- usable_h * share1
+  bottom_h <- usable_h * share2
+  
+  y_sep <- y_bottom + bottom_h + sep_gap_user / 2
+  
+  # Top quote
+  text(
+    x = x_mid,
+    y = y_top - top_h / 2,
+    labels = q1,
+    adj = c(0.5, 0.5),
+    cex = cex_text,
+    family = family,
+    col = "black"
+  )
+  
+  # Dashed separator
+  segments(
+    x0 = x_left, y0 = y_sep,
+    x1 = x_right, y1 = y_sep,
+    lty = sep_lty, lwd = sep_lwd, col = "black"
+  )
+  
+  # Bottom quote
+  text(
+    x = x_mid,
+    y = y_bottom + bottom_h / 2,
+    labels = q2,
+    adj = c(0.5, 0.5),
+    cex = cex_text,
+    family = family,
+    col = "black"
+  )
+  
+  if (return_recorded) {
+    recordPlot()
+  } else {
+    invisible(NULL)
+  }
+}
+
+#Making Figure 4
+jpeg("stm_two_topics_fig4.jpg", width = 8, height = 4, units = "in", res = 500)
+make_stm_topic_panel(
+  model = mod, # stm object
+  topic1 = 2,  # topic number 1
+  topic2 = 1, # topic number 2
+  n = 8,
+  wrap_width = c(70, 70),
+  family = "sans"
+)
+dev.off() #Close the active graphics device so the saved plot is written properly.
+
+
+```
+
+
+#Figure 5: Representative Response from Topic
+```{r}
+#Figure 5 displays exemplar responses from one recovered topic
+# to show the kind of text captured by that topic.
+
+#Making Figure 5
+quote_t2 <- thoughts$docs[[2]][3]
+quote_t2a <- thoughts$docs[[2]][4]
+thoughts$docs[[2]]
+
+jpeg("two_quote_panel_top1.jpg", width = 8, height = 4, units = "in", res = 300)
+make_quote_panel(
+  quote1 = quote_t2,
+  quote2 = quote_t2a,
+  wrap_width = c(45, 45),
+  family = "sans"
+)
+dev.off() # Close the active graphics device so the saved plot is written properly.
+```
+
+
+#Figure 6: A Representative Response from Topic
+
+```{r}
+# Figure 6 displays exemplar responses from the second recovered topic
+# so the topic labels can be compared to actual underlying documents.
+
+#Making Figure 6
+quote_t1 <- thoughts$docs[[1]][2]
+quote_t1a <- thoughts$docs[[1]][5]
+thoughts$docs[1]
+jpeg("two_quote_panel_top2.jpg", width = 8, height = 4, units = "in", res = 300)
+make_quote_panel(
+  quote1 = quote_t1,
+  quote2 = quote_t1a,
+  wrap_width = c(45, 45),
+  family = "sans"
+)
+dev.off() # Close the active graphics device so the saved plot is written properly.
+```
+
+
+#Figure 7: Words and Treatment Effects Associated with Topic 1
+
+```{r}
+# Figure 7 estimates post-STM treatment effects on topic prevalence.
+# estimateEffect() takes the fitted STM and calculates how the expected proportion
+# of each topic changes across the treatment and control conditions.
+
+prep <- estimateEffect(   # Estimate how document-level covariates relate to topic prevalence after fitting the STM.
+  c(2, 1) ~ treatment,
+  stmobj = mod,
+  metadata = meta,
+  uncertainty = "Global",
+  documents = documents
+)
+
+plot( # Plot the estimated difference in topic proportions between treated and control respondents.
+  prep,
+  covariate = "treatment",
+  topics = c(2, 1),
+  method = "difference",
+  cov.value1 = 1,
+  cov.value2 = 0,
+  xlab = "Difference in Topic Proportions (Treated-Control)",
+  xlim = c(-0.4, 0.3),
+  ci.level = 0.90,
+  labeltype = "numbers"
+)
+# Display the top words for the plotted topics so the treatment-effect figure
+# can be read together with the substantive content of each topic.
+labelTopics(mod, topics = c(2, 1), n = 7)
+```
+#Figure 8: Party Identification, Treatment, and the Predicted Proportion in Topic
+```{r}
+# Figure 8 estimates whether the treatment effect on topic prevalence changes across party identification.
+# Here, estimateEffect() is a post-estimation step: the STM has already been fit above,
+# and this function now estimates the conditional relationship between topic prevalence,
+# treatment status, and party ID.
+
+# This chunk is kept together because the second plot is layered on top of the first
+# using add = TRUE, so running lines separately can break the final figure.
+
+prep_int <- estimateEffect(
+  c(2) ~ treatment * s(pid_rep),
+  stmobj = mod,
+  metadata = meta,
+  uncertainty = "Global",
+  documents = documents)
+
+plot(   # Plot the estimated topic prevalence curve for treated respondents across party ID.
+  prep_int,
+  covariate = "pid_rep",
+  topics = 2,
+  method = "continuous",
+  moderator = "treatment",
+  moderator.value = 1,
+  ci.level = 0.90,
+  xlab = "Party ID",
+  ylab = "Mean Topic Proportions",
+  xlim = c(0, 1),
+  ylim = c(0, 0.7),
+  printlegend = FALSE,
+  xaxt = "n",
+  linecol = "red"
+)
+
+plot(
+  prep_int,
+  covariate = "pid_rep",
+  topics = 2,
+  method = "continuous",
+  moderator = "treatment",
+  moderator.value = 0,
+  ci.level = 0.90,
+  xlab = "Party ID",
+  ylab = "Mean Topic Proportions",
+  xlim = c(0, 1),
+  ylim = c(0, 0.7),
+  printlegend = FALSE,
+  xaxt = "n",
+  linecol = "blue",
+  add = TRUE
+)
+
+axis(
+  1,
+  at = c(0, 0.5, 1),
+  labels = c("Strong \n Democrat", "Moderate", "Strong \n Republican"),
+  padj = 0.5
+)
+
+text(0.35, 0.55, "Treated", col = "red")
+text(0.75, 0.15, "Control", col = "blue")
+
+
+
+# Alternate manual loess version of Figure 8.
+# This does not re-estimate the STM. Instead, it smooths the recovered topic proportions
+# from the selected STM run in order to mimic the visual shape of the published figure more closely.
+
+# The alternate loess version is included as a visual comparison, not as a separate STM estimate.
+
+topic_k <- 2
+
+treated <- meta$treatment == 1
+control <- meta$treatment == 0
+
+y_treat <- mod$theta[treated, topic_k]
+x_treat <- meta$pid_rep[treated]
+
+y_ctrl <- mod$theta[control, topic_k]
+x_ctrl <- meta$pid_rep[control]
+
+grid <- seq(0, 1, length.out = 200)
+
+fit_treat <- loess(y_treat ~ x_treat, span = 1)
+fit_ctrl  <- loess(y_ctrl  ~ x_ctrl,  span = 1)
+
+pred_treat <- predict(fit_treat, newdata = data.frame(x_treat = grid), se = TRUE)
+pred_ctrl  <- predict(fit_ctrl,  newdata = data.frame(x_ctrl  = grid), se = TRUE)
+
+plot(grid, pred_treat$fit, type = "l",
+     ylim = c(0, 0.7), xlim = c(0, 1),
+     xlab = "Party ID", ylab = "Mean Topic Proportions",
+     xaxt = "n", col = "red", lwd = 2)
+
+lines(grid, pred_treat$fit + 1.645 * pred_treat$se.fit, col = "red", lty = 2)
+lines(grid, pred_treat$fit - 1.645 * pred_treat$se.fit, col = "red", lty = 2)
+
+lines(grid, pred_ctrl$fit, col = "blue", lwd = 2)
+lines(grid, pred_ctrl$fit + 1.645 * pred_ctrl$se.fit, col = "blue", lty = 2)
+lines(grid, pred_ctrl$fit - 1.645 * pred_ctrl$se.fit, col = "blue", lty = 2)
+
+axis(1, at = c(0, 0.5, 1),
+     labels = c("Strong \n Democrat", "Moderate", "Strong \n Republican"))
+
+text(0.35, 0.52, "Treated", col = "red")
+text(0.72, 0.16, "Control", col = "blue")
+
+```
+
+
+
+
+#Figures 9 and 10: Fearful Response with High and Low Topic 1
+```{r Figures 9 and 10}
+# Figures 9 and 10 present representative quotes for high- and low-topic responses.
+# I first inspected several candidate quotes from the topic pools. Because the topic numbering
+# in my replication did not map cleanly onto the paper, I compared multiple candidates and then
+# reordered the search to select quotes that best matched the original figures.
+
+
+thoughts <- findThoughts(mod, texts=meta$open.ended.response, topics= c(1,2,3), n=10) # Retrieve exemplar documents that load highly on each topic so the replication can show representative quotes.
+
+# Figure 9
+# Initial inspection step: check candidate quotes and associated coder labels before selecting the final exemplars.
+thoughts$docs[[1]]
+meta$fear_ra1[thoughts$index[[1]]]  #In my replication, this recovered topic aligns more closely with paper Topic 2.
+meta$fear_ra2[thoughts$index[[1]]]
+plotQuote(thoughts$docs[[1]][1], width = 7) # Use stm's quote-plotting helper to display a selected exemplar response.
+plotQuote(thoughts$docs[[1]][4], width = 5) # Use stm's quote-plotting helper to display a selected exemplar response.
+
+
+
+#Figure10
+thoughts$docs[[2]]
+meta$fear_ra1[thoughts$index[[2]]] #In my replication, this recovered topic aligns more closely with paper Topic 1.
+meta$fear_ra2[thoughts$index[[2]]]
+plotQuote(meta$open.ended.response[thoughts$index[[2]][3]], width = 7) # Use stm's quote-plotting helper to display a selected exemplar response.
+
+# Representative quotes in the order that best matches the paper's figures
+# thoughts$docs[[2]] = Figure 9 pool (paper Topic 1: jobs/crime/services)
+# thoughts$docs[[1]] = Figure 10 pool (border/legality/amnesty contrast)
+
+thoughts <- findThoughts(  # Retrieve exemplar documents that load highly on each topic so the replication can show representative quotes.
+  mod,
+  texts = meta$open.ended.response,
+  topics = c(2, 1, 3),
+  n = 10
+)
+
+# Inspect coder labels and candidate quotes
+meta$fear_ra1[thoughts$index[[1]]]
+meta$fear_ra2[thoughts$index[[1]]]
+thoughts$docs[[1]]
+
+meta$fear_ra1[thoughts$index[[2]]]
+meta$fear_ra2[thoughts$index[[2]]]
+thoughts$docs[[2]]
+
+# Final selections
+# Figure 9 analogue: selected for substantive similarity to the paper's low-topic example,
+# even though the replicated topic mapping is not identical.
+plotQuote(thoughts$docs[[1]][3], width = 7) # Use stm's quote-plotting helper to display a selected exemplar response.
+# Figure 10 analogue: high predicted proportion of paper Topic 1
+plotQuote(thoughts$docs[[2]][6], width = 35) # Use stm's quote-plotting helper to display a selected exemplar response.
+
+```
+
+
+
+#Cleaning for Rand Analysis: Public Goods Games Experiment
+```{r}
+# This chunk attempts to import and repair the RAND replication files, including vocabulary alignment issues. 
+dataldac <- readLdac("final_tdm.csv") # Read the RAND public goods game document-term matrix.
+#Testing the File Pairing
+term_ids <- unlist(lapply(dataldac, function(x) x[1, ])) # Check whether the term IDs in the document-term matrix line up with the supplied vocabulary.
+max(term_ids)
+length(vocabcoarse)
+range(term_ids)
+
+#Inspecting the vocab files
+readLines("tdm89_vocab.csv", n = 10) # Inspect the vocabulary file directly to diagnose the mismatch.
+tail(readLines("tdm89_vocab.csv"), 10)
+
+
+# original vocab 
+vocabcoarse <- read.csv("tdm89_vocab.csv")$term #Load the RAND vocabulary file.
+
+# Add placeholder terms for the missing IDs so prepDocuments() can at least attempt
+# to align the document-term matrix and the vocabulary to the same length.
+missing_ids <- 474:493 
+vocab_padded <- c(vocabcoarse, paste0("MISSING_TERM_", missing_ids))
+
+length(vocab_padded)   # should now be 494
+
+
+# Shift document term IDs to 1-indexing for stm/prepDocuments compatibility.
+dataldac_fixed <- lapply(dataldac, function(doc) {
+  rbind(doc[1, ] + 1L, doc[2, ])
+})
+
+# Attempt to prepare the RAND documents after padding the vocabulary and shifting IDs.
+meta <- read.csv("tdm89_metadata.csv")
+meta$treatment <- as.numeric(meta$condition_number==9)
+data <- prepDocuments(dataldac_fixed, vocab_padded, meta = meta)
+documents <- data$documents
+vocab <- data$vocab
+meta <- data$meta
+
+# Check whether the treatment variable remains usable after document preparation.
+sum(is.na(meta$treatment))
+sum(!is.na(meta$treatment))
+table(meta$treatment, useNA = "ifany")
+```
+In the end, this workaround was not successful. 
+The metadata, vocabulary, and treatment files in the replication package did 
+not align cleanly enough to construct a valid STM input. Because of those 
+mismatches, I was unable to prepare the data in a way that allowed the model to be estimated.
+
+
+
+
+
+
+```{r, include = FALSE, SettingUptheModel}
+# Hidden troubleshooting chunk: attempted RAND model recovery after the file repairs above.
+# I kept this chunk to document the failed modeling attempt, even though it was not retained
+# as part of the final replication because the input files remained inconsistent.
+
+#set.seed(54321) #selecting the seed
+#
+#models <- selectModel(documents, vocab, 5, prevalence= ~meta$treatment, runs=50)
+#plotModels(models) # Plot diagnostic information for the candidate models to help choose the best-fitting/interpretable run.
+#length(documents)
+#nrow(meta)
+#table(meta$treatment, useNA = "ifany")
+#
+#mod <- models$runout[[3]]
+##making the model
+#mod <- stm(documents, vocab, 5, prevalence=~meta$treatment, seed=1601900)
+#labeltopics(mod, n=24) #pulling the topic labels
+
+```
+#Set Up Attempt for the Rand Experiment
+```{r, include = FALSE}
+# This section attempts to prepare the alternate RAND metadata/vocabulary pairing used for later figures.
+#dataldac <- readLdac("final_tdm.csv")
+#vocabcoarse <- read.csv("tdm1011_vocab.csv")$term
+#meta3 <- read.csv("tdm1011_metadata.csv")
+#meta3$treatment <- as.numeric(meta3$condition_number==10)
+#
+#data <- prepDocuments(dataldac, vocabcoarse, meta=meta3)
+#documents <- data$documents
+#vocab <- data$vocab
+#meta3 <- data$meta
+#
+## Select a candidate STM for the second RAND experiment.
+#set.seed(01238)
+#models <- selectModel(documents, vocab, 5, prevalence=~meta3$treatment, runs=50)
+#plotModels(models)
+#mod <- models$runout[[4]]
+#
+## Recover the selected model directly using the saved seed from the chosen run.
+##seed: 4671639
+#mod <- stm(documents, vocab, 5, prevalence=~meta$treatment, seed=4671649)
+#labeltopics(mod)
+```
+
+
+
+
+
+
+#Figure 11
+```{r}
+# This figure was intended to show the RAND STM treatment effect,
+# but it could not be reproduced because the RAND model could not be validly estimated.
+#Treatment effect plot
+#prep <- prep.plot(mod, meta$treatment, theta.uncertainty="Global", documents=documents, ci.level=.9)
+#ploteffect(prep,choosetopics=c(1,4),model=mod, xlab="Difference in Topic Proportions (Treated-Control)", labeltype="numbers", xlim=c(-.2, .15))
+#plottopics(mod, topics=c(1,4),width=50)
+```
+
+
+#Figure 12
+```{r}
+# This chunk plots the corresponding treatment effect from the LDA comparison model.
+#Treatment effect plot
+#prep <- prep.plot(mod, meta$treatment, theta.uncertainty="Global", documents=documents, ci.level=.9)
+#ploteffect(prep, choosetopics=c(1,5), model=mod, xlab="Difference in Topic Proportions (Treated-Control)", labeltype="numbers", xlim=c(-.18,.15))
+#plottopics(mod, topics=c(1,5), width=50)
+```
+
+
+
+#Figure 13
+```{r}
+# This chunk produces the normalized contribution plot used to compare topic content and treatment effects.
+#Normalized Contributon Plot
+#brandonexample <- prep.plot(mod, meta$normalized.contribution, topics=c(1,4),theta.uncertainty="Local", span=2, ci.level=.9, documents=documents, dv="covariate")
+#prep2 <- prep.plot(mod, meta$normalized.contribution, topics=c(1,4),theta.uncertainty="Global", span=2, ci.level=.9, documents=documents, dv="covariate")
+#ploteffect(prep2, choosetopics=c(1,2),model=mod, xlab="Mean Topic Proportions", ylab="Mean Normalized Contributions", labeltype="numbers", xlim=c(.05,.6), ylim=c(.15,1), #linecol=c("blue", "red"))
+
+
+```
+#Figures 15 and 16
+```{r}
+
+# This chunk fits a content-covariate STM and generates the gender-comparison figures from the RAND analysis.
+#Select model
+#set.seed(02138)
+#models <- selectModel(documents, vocab, 5, prevalence=~meta$treatment, content=~meta$female, runs=50)
+#plotModels(models)
+#mod2 <- models$runout[[9]]
+#mod$settings$seed
+
+#Recover selected model
+#Seed 4005847
+#meta$gender <- ifelse(meta$female==1, "female", "male")
+#mod2 <- stm(documents, vocab, 5, prevalence=~meta$treatment, content=~meta$gender, seed=4005847)
+#labeltopics(mod2)
+#
+#prep <- prep.plot(mod2, meta$treatment, theta.uncertainty="None", documents=documents, ci.level=.95)
+#ploteffect(prep,model=mod2, xlab="Treated-Control", labeltype="numbers")
+#
+#plotPerspectives(mod2, 3, M=50, labels=c("Female", "Male"))
+#
+#plottopics(mod2, 3, width=20, covariatelabs=c("Female", "Male"), n=40)
+
+```
+
+##ANES Analysis
+
+#ANES Set Up
+```{r, include = FALSE}
+# This section replicates the ANES-based portion of the paper by comparing
+# hand-coded issue categories to STM-estimated topic prevalence.
+
+# Keep only respondents with usable party ID, education, and age values,
+# matching the variables needed for the prevalence specification below.
+dataldac <- readLdac("final_anes.csv")
+vocabcoarse <- read.csv("final_anes_vocab.csv")$term
+meta4 <- read.csv("final_anes_metadata.csv")
+
+dataldac <- dataldac[meta4$pid_summary>0 & meta4$highest.grade.completed>0 & meta4$age>0]
+meta4 <- meta4[meta4$pid_summary>0 & meta4$highest.grade.completed>0 & meta4$age>0,]
+
+data <- prepDocuments(dataldac, vocabcoarse, meta=meta4) # Clean and align the ANES documents, vocabulary, and metadata for STM.
+documents <- data$documents # Extract the processed document list used by stm.
+vocab <- data$vocab # Extract the cleaned vocabulary matched to the processed documents.
+meta4 <- data$meta # Keep the metadata rows that remain after document preparation.
+
+#Select and Configure Model
+set.seed(743)
+
+models <- selectModel( documents,vocab, 60, prevalence = ~ s(pid_summary) + s(age) + s(highest.grade.completed),
+  data = meta4,runs = 50)
+plotModels(models) # Compare candidate ANES models across STM diagnostics before selecting one for replication.
+mod5 <- models$runout[[5]] # Select the candidate model used for the later ANES figures.
+labelTopics(mod5, n = 7) # Inspect top words to identify the substantive content of recovered topics.
+```
+
+#Figure 17
+```{r, fig.height=15, fig.width=10}
+## Figure 17 displays the top ANES topics using STM's built-in topic plot,
+# providing an overview of the recovered topic structure.
+
+mod <- models$runout[[5]]
+jpeg("ANES_topics.jpg", width = 10, height = 15, units = "in", res = 300)
+plot.STM(mod, n=3, threshold=3, numtopics=50, labeltype="frex")
+dev.off()
+```
+
+
+#Figure 18 
+```{r}
+# Figure 18 compares two approaches within the same substantive topic.
+# The left panel recreates the hand-coded war-topic relationship from the paper,
+# and the right panel compares it to the analogous STM-based interaction estimate.
+# This comparison shows whether the STM-based topic behaves similarly
+# to the hand-coded war category used in the original analysis.
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+# Original code uses ANES category 3 for the plotted "war/Iraq War" indicator
+
+#ANES Hand-coded Data
+
+anes <- 3
+
+meta4$warall <- ifelse(
+  meta4$mippol1_code1 == anes |
+    meta4$mippol1_code2 == anes |
+    meta4$mippol1_code3 == anes |
+    meta4$mippol1_code4 == anes |
+    meta4$mippol1_code5 == anes |
+    meta4$mippol1_code6 == anes |
+    meta4$mippol1_code7 == anes |
+    meta4$mippol1_code8 == anes,
+  1, NA)
+meta4$warall[is.na(meta4$warall)] <- 0
+
+main <- "ANES War Topic and Education"
+
+# Democrats: pid_summary < 3
+sub_dem <- subset(
+  meta4,
+  pid_summary < 3 & !is.na(highest.grade.completed) & !is.na(warall)
+)
+
+fit_dem <- loess(warall ~ highest.grade.completed, data = sub_dem, span = 2)
+
+newdat_dem <- data.frame(
+  highest.grade.completed = seq(13, 17, length.out = 100)
+)
+
+pred_dem <- predict(fit_dem, newdata = newdat_dem, se = TRUE)
+
+plot(
+  pred_dem$fit ~ newdat_dem$highest.grade.completed,
+  type = "l",
+  ylim = c(0, 0.1),
+  xlim = c(13, 17),
+  col = "blue",
+  xlab = "Years of Education",
+  ylab = "Probability of Topic",
+  main = main
+)
+
+lines(
+  (pred_dem$fit + 1.64 * pred_dem$se) ~ newdat_dem$highest.grade.completed,
+  col = "blue", lty = 2
+)
+lines(
+  (pred_dem$fit - 1.64 * pred_dem$se) ~ newdat_dem$highest.grade.completed,
+  col = "blue", lty = 2
+)
+
+# Republicans: pid_summary > 3
+sub_rep <- subset(
+  meta4,
+  pid_summary > 3 & !is.na(highest.grade.completed) & !is.na(warall)
+)
+
+fit_rep <- loess(warall ~ highest.grade.completed, data = sub_rep, span = 2)
+
+newdat_rep <- data.frame(
+  highest.grade.completed = seq(13, 17, length.out = 100)
+)
+
+pred_rep <- predict(fit_rep, newdata = newdat_rep, se = TRUE)
+
+lines(
+  pred_rep$fit ~ newdat_rep$highest.grade.completed,
+  type = "l",
+  col = "red"
+)
+
+lines(
+  (pred_rep$fit + 1.64 * pred_rep$se) ~ newdat_rep$highest.grade.completed,
+  col = "red", lty = 2
+)
+lines(
+  (pred_rep$fit - 1.64 * pred_rep$se) ~ newdat_rep$highest.grade.completed,
+  col = "red", lty = 2
+)
+
+text(14, 0.02, "Republican", col = "red", cex = 1.2)
+text(14.5, 0.08, "Democrat", col = "blue", cex = 1.2)
+
+# STM-based interaction plot for education and the recovered war topic.
+# This estimateEffect() model asks whether the relationship between education and topic prevalence
+# varies across partisan groups in the STM output.
+
+meta4$pid_group <- ifelse(
+  meta4$pid_summary < 3, "Democrat",
+  ifelse(meta4$pid_summary > 3, "Republican", "Middle")
+)
+
+meta4$pid_group <- factor(
+  meta4$pid_group,
+  levels = c("Republican", "Middle", "Democrat")
+)
+
+table(meta4$pid_group, useNA = "ifany")
+
+prep_ed <- estimateEffect(  # Estimate how document-level covariates relate to topic prevalence after fitting the STM.
+  c(23) ~ highest.grade.completed * pid_group,
+  stmobj = mod5,
+  metadata = meta4,
+  uncertainty = "Global",
+  documents = documents
+)
+
+# Democrats
+plot(
+  prep_ed,
+  covariate = "highest.grade.completed",
+  topics = 23,
+  method = "continuous",
+  moderator = "pid_group",
+  moderator.value = "Democrat",
+  ci.level = 0.90,
+  ylab = "Probability of Topic",
+  xlab = "Years of Education",
+  ylim = c(0, 0.1),
+  xlim = c(13, 17),
+  printlegend = FALSE,
+  linecol = "blue",
+  main = "STM War Topic and Education"
+)
+
+# Republicans
+plot(
+  prep_ed,
+  covariate = "highest.grade.completed",
+  topics = 23,
+  method = "continuous",
+  moderator = "pid_group",
+  moderator.value = "Republican",
+  ci.level = 0.90,
+  ylab = "Probability of Topic",
+  xlab = "Years of Education",
+  ylim = c(0, 0.1),
+  xlim = c(13, 17),
+  printlegend = FALSE,
+  linecol = "red",
+  add = TRUE
+)
+
+text(16, 0.09, "Democrat", col = "blue", cex = 1.2)
+text(14.5, 0.03, "Republican", col = "red", cex = 1.2)
+
+```
+
+
