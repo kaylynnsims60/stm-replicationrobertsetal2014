@@ -1,6 +1,8 @@
 # Replication Materials: Roberts et al. STM for Open-Ended Survey Responses
 
-This repository contains replication materials for a Structural Topic Model (STM) analysis based on Roberts et al's (2014) paper. A link to the original paper can be found here: (https://onlinelibrary-wiley-com.proxy1.lib.uwo.ca/doi/10.1111/ajps.12103)
+This repository contains replication materials for a Structural Topic Model (STM) analysis based on Roberts et al's (2014) paper. 
+
+A link to the original paper can be found here: [https://onlinelibrary-wiley-com.proxy1.lib.uwo.ca/doi/10.1111/ajps.12103]
 The purpose of this project is to reproduce key figures and analytical steps from the original paper while documenting the workflow and challenges of replicating STM analyses using the modern `stm` package in R.
 
 ## Overview
