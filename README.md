@@ -44,8 +44,7 @@ STM produces different results across runs due to local mode variation. As a res
 
 The data used in this replication is stored in:
 
-data/
-├── original_replication_files/   
+data/original_replication_files/   
 
 - `original_replication_files/` contains the original datasets provided by the authors  
 
@@ -63,8 +62,7 @@ Some components of the replication materials (particularly those associated with
 
 Generated figures and outputs are stored in:
 
-output/
-├── figures/  
+output/figures/  
 
 Figures are also generated directly within the `.Rmd` workflow script. 
 
