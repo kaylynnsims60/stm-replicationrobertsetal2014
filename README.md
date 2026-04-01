@@ -35,7 +35,7 @@ This file contains the full workflow, including:
 - Inspecting topics using `labelTopics()`  
 - Extracting example documents using `findThoughts()`  
 - Estimating topic prevalence and interaction effects using `estimateEffect()`  
-- Recreating figures using both built-in STM tools and custom plotting functions where the original methods could not be fully recovered. 
+- Recreating figures using both built-in STM tools and custom plotting functions where the original methods could not be fully recovered
 
 Some figures were recreated using custom functions because the original helper functions referenced in the paper were not available.
 
@@ -104,6 +104,7 @@ Some datasets, particularly in the Rand and ANES experiments, contained mismatch
 ```r
 install.packages(c("stm", "tidyverse", "knitr"))
 ```
+
 3. Set the working directory to the location of the replication data  
 4. Run the script or knit the document  
 
