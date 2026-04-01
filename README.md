@@ -24,7 +24,7 @@ Because the original analysis relied on an earlier version of STM and helper fun
 
 The replication script is:
 
-`scripts/Robertsetalreplication.Rmd`
+`scripts/roberts_STM_replication.Rmd`
 
 This file contains the full workflow, including:
 
@@ -98,7 +98,7 @@ Some datasets, particularly in the Rand and ANES experiments, contained mismatch
 
 ## How to Run the Replication
 
-1. Open `scripts/Roberstetalreplication.Rmd` in RStudio  
+1. Open `scripts/roberts_STM_replication.Rmd` in RStudio  
 2. Install required packages:
 
 ```r
